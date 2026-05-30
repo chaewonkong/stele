@@ -37,3 +37,40 @@ body,
 .md-link { color: #2563eb; text-decoration: underline; cursor: pointer; }
 .md-url  { color: #6b7280; font-size: 0.9em; }
 .md-hr   { color: #d1d5db; }
+
+/* Task checkbox widget */
+.cm-task-checkbox {
+  width: 14px;
+  height: 14px;
+  margin: 0 4px 0 0;
+  vertical-align: middle;
+  cursor: pointer;
+  accent-color: #2563eb;
+}
+
+/* Table widget */
+.cm-table-widget {
+  display: block;
+  margin: 4px 0;
+  overflow-x: auto;
+  cursor: text;
+}
+
+.cm-md-table {
+  border-collapse: collapse;
+  font-size: 0.875em;
+}
+
+.cm-md-table th,
+.cm-md-table td {
+  border: 1px solid #e5e7eb;
+  padding: 4px 12px;
+  text-align: left;
+  white-space: nowrap;
+}
+
+.cm-md-table th {
+  background: #f3f4f6;
+  font-weight: 600;
+  color: #111827;
+}

@@ -1,7 +1,7 @@
 import { useEffect, useRef } from 'react'
-import { Decoration, DecorationSet, EditorView, ViewPlugin, ViewUpdate, keymap } from '@codemirror/view'
-import { EditorState, RangeSetBuilder } from '@codemirror/state'
-import { markdown } from '@codemirror/lang-markdown'
+import { Decoration, DecorationSet, EditorView, ViewPlugin, ViewUpdate, WidgetType, keymap } from '@codemirror/view'
+import { EditorState, Prec, RangeSetBuilder } from '@codemirror/state'
+import { markdown, markdownLanguage } from '@codemirror/lang-markdown'
 import { syntaxTree } from '@codemirror/language'
 import { defaultKeymap, history, historyKeymap } from '@codemirror/commands'
 import { GetNote, UpdateNote } from '../../wailsjs/go/main/App'
@@ -102,6 +102,212 @@ const markdownDecorations = ViewPlugin.fromClass(
   { decorations: v => v.decorations }
 )
 
+// ─── Checkbox Widget ──────────────────────────────────────────────────────────
+
+class CheckboxWidget extends WidgetType {
+  constructor(
+    readonly checked: boolean,
+    readonly markerFrom: number,
+    readonly markerTo: number,
+  ) {
+    super()
+  }
+
+  eq(other: CheckboxWidget) {
+    return other.checked === this.checked && other.markerFrom === this.markerFrom
+  }
+
+  toDOM(view: EditorView): HTMLElement {
+    const input = document.createElement('input')
+    input.type = 'checkbox'
+    input.className = 'cm-task-checkbox'
+    input.checked = this.checked
+    input.onmousedown = (e) => {
+      e.preventDefault()
+      view.dispatch({
+        changes: { from: this.markerFrom, to: this.markerTo, insert: this.checked ? '[ ]' : '[x]' },
+      })
+    }
+    return input
+  }
+
+  ignoreEvent() { return true }
+}
+
+function buildCheckboxDecorations(view: EditorView): DecorationSet {
+  const builder = new RangeSetBuilder<Decoration>()
+  for (const { from, to } of view.visibleRanges) {
+    syntaxTree(view.state).iterate({
+      from,
+      to,
+      enter(node) {
+        if (node.name !== 'TaskMarker') return
+        // Find ancestor ListItem to locate ListMark
+        let ancestor = node.node.parent
+        while (ancestor && ancestor.name !== 'ListItem') ancestor = ancestor.parent
+        if (ancestor) {
+          const listMark = ancestor.firstChild
+          if (listMark && listMark.name === 'ListMark') {
+            // Hide "- " (ListMark + space before TaskMarker)
+            builder.add(listMark.from, node.from, Decoration.replace({}))
+          }
+        }
+        const text = view.state.doc.sliceString(node.from, node.to)
+        const checked = text === '[x]' || text === '[X]'
+        builder.add(
+          node.from,
+          node.to,
+          Decoration.replace({ widget: new CheckboxWidget(checked, node.from, node.to) }),
+        )
+      },
+    })
+  }
+  return builder.finish()
+}
+
+const checkboxPlugin = ViewPlugin.fromClass(
+  class {
+    decorations: DecorationSet
+    constructor(view: EditorView) {
+      this.decorations = buildCheckboxDecorations(view)
+    }
+    update(update: ViewUpdate) {
+      if (update.view.composing) return
+      if (update.docChanged || update.viewportChanged) {
+        this.decorations = buildCheckboxDecorations(update.view)
+      }
+    }
+  },
+  { decorations: v => v.decorations },
+)
+
+// ─── Table Widget ─────────────────────────────────────────────────────────────
+
+function parseTableDOM(source: string): HTMLElement {
+  const wrap = document.createElement('div')
+  wrap.className = 'cm-table-widget'
+  const table = document.createElement('table')
+  table.className = 'cm-md-table'
+  const lines = source.trim().split('\n').map(l => l.trim()).filter(Boolean)
+  let isFirst = true
+  for (const line of lines) {
+    const cells = line.split('|').slice(1, -1)
+    if (cells.every(c => /^\s*:?-+:?\s*$/.test(c))) continue  // separator row
+    const tr = document.createElement('tr')
+    cells.forEach(cell => {
+      const el = document.createElement(isFirst ? 'th' : 'td')
+      el.textContent = cell.trim()
+      tr.appendChild(el)
+    })
+    table.appendChild(tr)
+    isFirst = false
+  }
+  wrap.appendChild(table)
+  return wrap
+}
+
+class TableWidget extends WidgetType {
+  constructor(readonly source: string, readonly tableFrom: number) {
+    super()
+  }
+
+  eq(other: TableWidget) {
+    return other.source === this.source
+  }
+
+  toDOM(view: EditorView): HTMLElement {
+    const wrap = parseTableDOM(this.source)
+    wrap.onmousedown = (e) => {
+      e.preventDefault()
+      view.dispatch({ selection: { anchor: this.tableFrom } })
+      view.focus()
+    }
+    return wrap
+  }
+
+  ignoreEvent() { return true }
+}
+
+function buildTableDecorations(view: EditorView): DecorationSet {
+  const builder = new RangeSetBuilder<Decoration>()
+  const cursor = view.state.selection.main.head
+  for (const { from, to } of view.visibleRanges) {
+    syntaxTree(view.state).iterate({
+      from,
+      to,
+      enter(node) {
+        if (node.name !== 'Table') return
+        if (cursor >= node.from && cursor <= node.to) return false
+        const source = view.state.doc.sliceString(node.from, node.to)
+        const startLine = view.state.doc.lineAt(node.from)
+        const endLine = view.state.doc.lineAt(node.to)
+        builder.add(
+          startLine.from,
+          endLine.to,
+          Decoration.replace({ widget: new TableWidget(source, node.from), block: true }),
+        )
+        return false
+      },
+    })
+  }
+  return builder.finish()
+}
+
+const tablePlugin = ViewPlugin.fromClass(
+  class {
+    decorations: DecorationSet
+    constructor(view: EditorView) {
+      this.decorations = buildTableDecorations(view)
+    }
+    update(update: ViewUpdate) {
+      if (update.view.composing) return
+      if (update.docChanged || update.viewportChanged || update.selectionSet) {
+        this.decorations = buildTableDecorations(update.view)
+      }
+    }
+  },
+  { decorations: v => v.decorations },
+)
+
+// ─── Task List Enter ──────────────────────────────────────────────────────────
+
+function taskListEnter(view: EditorView): boolean {
+  const state = view.state
+  const range = state.selection.main
+  if (!range.empty) return false
+
+  const pos = range.from
+  const line = state.doc.lineAt(pos)
+  const m = /^(\s*[-+*] \[[ xX]\] )(.*)$/.exec(line.text)
+  if (!m) return false
+
+  const markerLen = m[1].length
+  if (pos - line.from < markerLen) return false
+
+  const hasContent = m[2].trim().length > 0
+
+  if (!hasContent) {
+    // 빈 task item: 마커 제거 후 일반 줄로
+    view.dispatch({
+      changes: { from: line.from, to: line.to, insert: '' },
+      selection: { anchor: line.from },
+      userEvent: 'input',
+    })
+    return true
+  }
+
+  // 내용 있는 task: 새 [ ] 항목 삽입
+  const bullet = /^\s*[-+*]/.exec(line.text)![0]
+  const newLine = '\n' + bullet + ' [ ] '
+  view.dispatch({
+    changes: { from: pos, insert: newLine },
+    selection: { anchor: pos + newLine.length },
+    scrollIntoView: true,
+    userEvent: 'input',
+  })
+  return true
+}
+
 const editorTheme = EditorView.theme({
   '&': { height: '100%', display: 'flex', flexDirection: 'column' },
   '.cm-scroller': {
@@ -165,9 +371,12 @@ export default function Editor({ noteId, onSaved }: Props) {
           extensions: [
             history(),
             keymap.of([...historyKeymap, ...defaultKeymap]),
-            markdown(),
+            Prec.highest(keymap.of([{ key: 'Enter', run: taskListEnter }])),
+            markdown({ base: markdownLanguage }),
             EditorView.lineWrapping,
             markdownDecorations,
+            checkboxPlugin,
+            tablePlugin,
             editorTheme,
             EditorView.updateListener.of(update => {
               if (!update.docChanged) return
