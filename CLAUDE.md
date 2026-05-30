@@ -39,7 +39,7 @@ stele/
     │   ├── style.css        # Tailwind v4 진입점
     │   └── components/
     │       ├── Sidebar.tsx  # 노트 목록, 핀/휴지통 액션
-    │       └── Editor.tsx   # textarea (M3에서 CM6으로 교체)
+    │       └── Editor.tsx   # CM6 EditorView (Bear형 decoration + IME 가드)
     ├── wailsjs/             # Wails 자동 생성 (수정 금지)
     ├── package.json
     ├── vite.config.ts
@@ -76,7 +76,7 @@ sqlc generate
 - [x] **M0** — 스캐폴드: Wails v2 + react-ts, pnpm, Tailwind v4, CM6 deps
 - [x] **M1** — 데이터 계층: sqlc + SQLite 스키마, Go CRUD/export API, 단위 테스트 8개
 - [x] **M2** — 기본 UI: 2-pane 레이아웃, 사이드바(핀/휴지통), textarea 에디터, 자동저장
-- [ ] **M3** — 에디터 코어: CM6 + lang-markdown, Bear형 mark 스타일링, **한글 IME 가드**
+- [x] **M3** — 에디터 코어: CM6 + lang-markdown, Bear형 mark 스타일링, **한글 IME 가드**
 - [ ] **M4** — 블록 위젯: 체크박스 토글, 표 커서-인지 렌더
 - [ ] **M5** — export·마감: 성능 점검, 콜드 스타트 최적화, DMG 배포
 
@@ -93,8 +93,3 @@ sqlc generate
 - Typora/Obsidian식 완전 WYSIWYG(커서 떠나면 마커 숨김) → v1 비목표, IME 리스크 높음
 - replace/widget decoration은 조합 범위 근처에 적용 금지
 
-### M3 구현 참고
-- CM6 `EditorView.composing` 또는 `compositionstart`/`compositionend` 이벤트로 조합 상태 추적
-- `ViewPlugin`으로 decoration 계산 시 composing 상태 체크
-- 현재 `Editor.tsx`의 textarea를 CM6 `EditorView`로 교체
-- 자동저장 디바운스는 `Editor.tsx`의 기존 패턴 유지 (bodyRef + setTimeout)

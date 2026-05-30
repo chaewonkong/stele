@@ -7,3 +7,33 @@ body,
     margin: 0;
     overflow: hidden;
 }
+
+/* Bear형 마크다운 데코레이션 */
+.md-h1 { font-size: 1.75em; font-weight: 700; color: #111827; }
+.md-h2 { font-size: 1.45em; font-weight: 700; color: #111827; }
+.md-h3 { font-size: 1.2em;  font-weight: 600; color: #111827; }
+.md-h4 { font-size: 1.05em; font-weight: 600; color: #1f2937; }
+.md-h5 { font-size: 1em;    font-weight: 600; color: #374151; }
+
+/* 마커(#, **, *, ~~ 등) — 흐리게 */
+.md-mark { opacity: 0.3; }
+
+.md-bold   { font-weight: 700; }
+.md-italic { font-style: italic; }
+.md-strike { text-decoration: line-through; color: #9ca3af; }
+
+.md-inline-code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.875em;
+  background: rgba(0, 0, 0, 0.06);
+  border-radius: 3px;
+}
+.md-code-mark  { opacity: 0.35; }
+.md-code-block { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0.875em; color: #4b5563; }
+
+.md-blockquote { color: #6b7280; }
+/* QuoteMark(>) 는 .md-mark 로 처리 */
+
+.md-link { color: #2563eb; text-decoration: underline; cursor: pointer; }
+.md-url  { color: #6b7280; font-size: 0.9em; }
+.md-hr   { color: #d1d5db; }
