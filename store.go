@@ -170,8 +170,8 @@ func (s *Store) ListActiveNotesForExport(ctx context.Context) ([]db.ListActiveNo
 // Priority: first # heading → first non-empty line → "Untitled"
 func extractTitle(body string) string {
 	var firstNonEmpty string
-	for _, line := range strings.Split(body, "\n") {
-		trimmed := strings.TrimSpace(line)
+	for trimmed := range strings.SplitSeq(body, "\n") {
+		trimmed = strings.TrimSpace(trimmed)
 		if trimmed == "" {
 			continue
 		}
@@ -195,7 +195,7 @@ func extractTitle(body string) string {
 // extractPreview returns ~120-rune plain-text preview by stripping leading markdown markers per line.
 func extractPreview(body string) string {
 	var sb strings.Builder
-	for _, line := range strings.Split(body, "\n") {
+	for line := range strings.SplitSeq(body, "\n") {
 		line = strings.TrimSpace(line)
 		if line == "" {
 			continue
