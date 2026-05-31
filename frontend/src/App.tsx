@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useState, type CSSProperties } from 'react'
 import { CreateNote, ListNotes, PurgeNote, RestoreNote, TogglePin, TrashNote } from '../wailsjs/go/main/App'
 import { main } from '../wailsjs/go/models'
 import Editor from './components/Editor'
@@ -68,20 +68,27 @@ export default function App() {
   }, [])
 
   return (
-    <div className="flex h-screen overflow-hidden bg-white">
-      <Sidebar
-        notes={notes}
-        activeNoteId={activeNoteId}
-        showTrash={showTrash}
-        onSelect={setActiveNoteId}
-        onCreate={handleCreate}
-        onTogglePin={handleTogglePin}
-        onTrash={handleTrash}
-        onRestore={handleRestore}
-        onPurge={handlePurge}
-        onToggleTrash={handleToggleTrash}
+    <div className="flex flex-col h-screen overflow-hidden bg-white">
+      {/* 신호등 전용 드래그 타이틀바 (OI-W1/W2): 사이드바와 동일한 회색으로 통일 */}
+      <div
+        className="h-9 shrink-0 bg-gray-50"
+        style={{ '--wails-draggable': 'drag' } as CSSProperties}
       />
-      <Editor noteId={activeNoteId} onSaved={handleSaved} />
+      <div className="flex flex-1 min-h-0 overflow-hidden">
+        <Sidebar
+          notes={notes}
+          activeNoteId={activeNoteId}
+          showTrash={showTrash}
+          onSelect={setActiveNoteId}
+          onCreate={handleCreate}
+          onTogglePin={handleTogglePin}
+          onTrash={handleTrash}
+          onRestore={handleRestore}
+          onPurge={handlePurge}
+          onToggleTrash={handleToggleTrash}
+        />
+        <Editor noteId={activeNoteId} onSaved={handleSaved} />
+      </div>
     </div>
   )
 }

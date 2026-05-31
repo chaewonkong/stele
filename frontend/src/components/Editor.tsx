@@ -93,7 +93,11 @@ const markdownDecorations = ViewPlugin.fromClass(
     }
 
     update(update: ViewUpdate) {
-      if (update.view.composing) return  // 한글 IME 가드: 조합 중 재계산 금지
+      if (update.view.composing) {
+        // 조합 중: 재계산 금지(SPEC §8.4). 위치만 매핑해 어긋남 방지.
+        if (update.docChanged) this.decorations = this.decorations.map(update.changes)
+        return
+      }
       if (update.docChanged || update.viewportChanged) {
         this.decorations = buildDecorations(update.view)
       }
@@ -136,12 +140,16 @@ class CheckboxWidget extends WidgetType {
 
 function buildCheckboxDecorations(view: EditorView): DecorationSet {
   const builder = new RangeSetBuilder<Decoration>()
+  const cursorLine = view.state.doc.lineAt(view.state.selection.main.head).number
   for (const { from, to } of view.visibleRanges) {
     syntaxTree(view.state).iterate({
       from,
       to,
       enter(node) {
         if (node.name !== 'TaskMarker') return
+        // 커서가 있는 줄은 소스 노출 (표 위젯과 동일). replace 위젯이 조합 영역에
+        // 끼어드는 것을 막아 한글 IME 마지막 글자 소실 방지 (SPEC §8.4 #4)
+        if (view.state.doc.lineAt(node.from).number === cursorLine) return
         // Find ancestor ListItem to locate ListMark
         let ancestor = node.node.parent
         while (ancestor && ancestor.name !== 'ListItem') ancestor = ancestor.parent
@@ -172,8 +180,14 @@ const checkboxPlugin = ViewPlugin.fromClass(
       this.decorations = buildCheckboxDecorations(view)
     }
     update(update: ViewUpdate) {
-      if (update.view.composing) return
-      if (update.docChanged || update.viewportChanged) {
+      if (update.view.composing) {
+        // 조합 중: 재빌드 금지(조합 글자 소실 방지). 위치만 매핑해 다른 줄의
+        // replace decoration 범위가 어긋나 줄이 결합되는 깨짐을 방지.
+        if (update.docChanged) this.decorations = this.decorations.map(update.changes)
+        return
+      }
+      // selectionSet 포함: 커서가 task 줄로 진입/이탈 시 체크박스 ↔ 소스 전환
+      if (update.docChanged || update.viewportChanged || update.selectionSet) {
         this.decorations = buildCheckboxDecorations(update.view)
       }
     }
@@ -252,10 +266,12 @@ function buildTableDecorations(state: EditorState): DecorationSet {
 const tableField = StateField.define<DecorationSet>({
   create: (state) => buildTableDecorations(state),
   update(deco, tr) {
-    // 커서가 표 안/밖으로 이동할 때(selection)도 재계산. 표 위젯은 커서가 없는
-    // 위치에만 렌더되므로 IME 조합 영역과 겹치지 않음 → composing 가드 불필요.
-    if (tr.docChanged || tr.selection) return buildTableDecorations(tr.state)
-    return deco.map(tr.changes)
+    // 커서 이동(문서 변경 없음)에만 재계산 → 커서가 표 안/밖 전환 시 위젯 토글.
+    // 입력(docChanged)은 위치 매핑만 → IME 조합 중 block decoration 재빌드로 인한
+    // 위치 꼬임(엉뚱한 곳에 입력)/조합 글자 소실 방지 (SPEC §8.4).
+    if (tr.selection && !tr.docChanged) return buildTableDecorations(tr.state)
+    if (tr.docChanged) return deco.map(tr.changes)
+    return deco
   },
   provide: (f) => EditorView.decorations.from(f),
 })
@@ -298,6 +314,41 @@ function taskListEnter(view: EditorView): boolean {
   })
   return true
 }
+
+// IME 조합 중 Enter는 keymap 명령(taskListEnter)을 건너뛰어 기본 개행(\n)만 삽입됨.
+// → task 줄에서의 단순 "\n" 삽입을 transactionFilter로 가로채 마커를 붙임.
+// (영문/비조합 Enter는 taskListEnter가 처리하므로 그 결과 트랜잭션은 여기서 무시됨)
+const taskListContinue = EditorState.transactionFilter.of((tr) => {
+  if (!tr.docChanged) return tr
+
+  // 조합 commit은 조합 영역을 replace 형태로 동기화할 수 있어("다"→"다\n") 변경 모양에
+  // 의존하지 않음. 삽입된 개행 위치(newDoc 좌표)를 change 기하로 결정적으로 계산
+  // → 조합 중 stale 커서(tr.selection)에 의존하지 않아 위치가 어긋나지 않음.
+  let newLineStart = -1
+  let multi = false
+  tr.changes.iterChanges((_fa, _ta, fromB, _tb, inserted) => {
+    if (inserted.lines > 1) {
+      if (newLineStart !== -1) multi = true
+      newLineStart = fromB + inserted.line(1).length + 1 // 첫 개행 직후 위치
+    }
+  })
+  if (newLineStart === -1 || multi) return tr
+
+  const newDoc = tr.newDoc
+  const curLine = newDoc.lineAt(newLineStart)
+
+  // 새 줄 맨 앞이 비어있고 + 이전 줄이 내용 있는 task 인 경우만 마커 부착.
+  // (taskListEnter가 처리한 영문 Enter는 새 줄이 "- [ ] "라 비어있지 않아 제외됨)
+  if (newLineStart !== curLine.from || curLine.text.trim().length !== 0) return tr
+  if (curLine.number < 2) return tr
+  const m = /^(\s*)([-+*]) \[[ xX]\] (.*)$/.exec(newDoc.line(curLine.number - 1).text)
+  if (!m || m[3].trim().length === 0) return tr
+
+  const insert = m[1] + m[2] + ' [ ] '
+  // sequential: true → changes/selection을 tr 적용 *후*(newDoc) 좌표로 해석.
+  // 없으면 startState 좌표로 처리돼 마커가 아래 줄로 어긋남.
+  return [tr, { changes: { from: newLineStart, insert }, selection: { anchor: newLineStart + insert.length }, sequential: true }]
+})
 
 const editorTheme = EditorView.theme({
   '&': { height: '100%', display: 'flex', flexDirection: 'column' },
@@ -363,6 +414,7 @@ export default function Editor({ noteId, onSaved }: Props) {
             history(),
             keymap.of([...historyKeymap, ...defaultKeymap]),
             Prec.highest(keymap.of([{ key: 'Enter', run: taskListEnter }])),
+            taskListContinue,
             markdown({ base: markdownLanguage }),
             EditorView.lineWrapping,
             markdownDecorations,

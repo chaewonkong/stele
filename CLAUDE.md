@@ -77,19 +77,30 @@ sqlc generate
 - [x] **M1** — 데이터 계층: sqlc + SQLite 스키마, Go CRUD/export API, 단위 테스트 8개
 - [x] **M2** — 기본 UI: 2-pane 레이아웃, 사이드바(핀/휴지통), textarea 에디터, 자동저장
 - [x] **M3** — 에디터 코어: CM6 + lang-markdown, Bear형 mark 스타일링, **한글 IME 가드**
-- [ ] **M4** — 블록 위젯: 체크박스 토글, 표 커서-인지 렌더
+- [x] **M4** — 블록 위젯: 체크박스 토글, 표 커서-인지 렌더, macOS 윈도우 크롬(신호등/드래그) + IME 깨짐 수정
 - [ ] **M5** — export·마감: 성능 점검, 콜드 스타트 최적화, DMG 배포
 
 ## 핵심 제약 (위반 시 버그)
 
 ### 한글 IME 가드 (SPEC §8.4)
-1. **`view.composing === true` 동안 decoration 재계산/치환 금지** — mark 스타일 갱신도 조합 종료 후로 미룸
+1. **`view.composing === true` 동안 decoration "재계산(rebuild)" 금지.** 단 **동결(freeze)은 금물** —
+   replace/block decoration을 그냥 멈추면 위 줄에 글자 삽입 시 치환 범위가 옛 위치에 stale로 남아
+   줄 결합·엉뚱한 위치 입력 등 깨짐 발생. 조합 중에는 **`decorations.map(changes)`로 위치만 갱신**하고,
+   재계산은 `compositionend`(비조합 트랜잭션) 이후로 미룸. (mark는 비파괴라 동결해도 무증상이지만 동일 규칙 적용)
 2. **커스텀 키바인딩**: `if (e.isComposing) return;` 진입 즉시 패스
 3. **자동저장**: `bodyRef.current` 읽기만 → 에디터 상태 변경 금지. `compositionend` 이후 저장 정렬 권장
-4. **위젯**: 표·체크박스 위젯은 커서/조합이 없는 위치에서만 활성
+4. **위젯**: 표·체크박스 위젯은 커서/조합이 없는 위치에서만 활성 (커서 있는 줄은 소스 노출)
+5. **keymap 명령은 조합 중 Enter를 건너뜀.** task 리스트 자동 이어쓰기처럼 IME 중에도 동작해야 하는 건
+   keymap이 아니라 **`EditorState.transactionFilter`**로 처리. 필터에서 `[tr, extra]` 반환 시 extra의
+   좌표가 post-tr이면 반드시 **`sequential: true`** (없으면 startState 좌표로 해석돼 위치가 어긋남).
 
 ### 에디터 렌더 방식 (SPEC §8.1)
 - Bear형: 마커(`#`, `**`, `` ` `` 등) 유지 + **mark decoration**(스타일만, 텍스트 비파괴)
 - Typora/Obsidian식 완전 WYSIWYG(커서 떠나면 마커 숨김) → v1 비목표, IME 리스크 높음
 - replace/widget decoration은 조합 범위 근처에 적용 금지
+
+### macOS 윈도우 크롬
+- `main.go`는 `TitleBarHiddenInset()` 사용 → 신호등이 콘텐츠 위에 떠 있음.
+- `App.tsx` 최상단에 신호등 전용 **드래그 바**(`h-9`, `bg-gray-50`, `--wails-draggable: drag`)를 두고
+  사이드바/에디터를 그 아래로 배치 → 신호등이 헤더/버튼과 겹치지 않음. 드래그 영역 내 버튼은 `no-drag`.
 
