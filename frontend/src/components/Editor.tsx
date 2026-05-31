@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react'
 import { Decoration, DecorationSet, EditorView, ViewPlugin, ViewUpdate, WidgetType, keymap } from '@codemirror/view'
-import { EditorState, Prec, RangeSetBuilder } from '@codemirror/state'
+import { EditorState, Prec, RangeSetBuilder, StateField } from '@codemirror/state'
 import { markdown, markdownLanguage } from '@codemirror/lang-markdown'
 import { syntaxTree } from '@codemirror/language'
 import { defaultKeymap, history, historyKeymap } from '@codemirror/commands'
@@ -228,46 +228,37 @@ class TableWidget extends WidgetType {
   ignoreEvent() { return true }
 }
 
-function buildTableDecorations(view: EditorView): DecorationSet {
+// block/줄바꿈을 가로지르는 replace decoration은 ViewPlugin에서 제공할 수 없음(CM6 throw).
+// 반드시 StateField로 제공해야 함.
+function buildTableDecorations(state: EditorState): DecorationSet {
   const builder = new RangeSetBuilder<Decoration>()
-  const cursor = view.state.selection.main.head
-  for (const { from, to } of view.visibleRanges) {
-    syntaxTree(view.state).iterate({
-      from,
-      to,
-      enter(node) {
-        if (node.name !== 'Table') return
-        if (cursor >= node.from && cursor <= node.to) return false
-        const source = view.state.doc.sliceString(node.from, node.to)
-        const startLine = view.state.doc.lineAt(node.from)
-        const endLine = view.state.doc.lineAt(node.to)
-        builder.add(
-          startLine.from,
-          endLine.to,
-          Decoration.replace({ widget: new TableWidget(source, node.from), block: true }),
-        )
-        return false
-      },
-    })
-  }
+  const cursor = state.selection.main.head
+  syntaxTree(state).iterate({
+    enter(node) {
+      if (node.name !== 'Table') return
+      if (cursor >= node.from && cursor <= node.to) return false
+      const source = state.doc.sliceString(node.from, node.to)
+      builder.add(
+        node.from,
+        node.to,
+        Decoration.replace({ widget: new TableWidget(source, node.from), block: true }),
+      )
+      return false
+    },
+  })
   return builder.finish()
 }
 
-const tablePlugin = ViewPlugin.fromClass(
-  class {
-    decorations: DecorationSet
-    constructor(view: EditorView) {
-      this.decorations = buildTableDecorations(view)
-    }
-    update(update: ViewUpdate) {
-      if (update.view.composing) return
-      if (update.docChanged || update.viewportChanged || update.selectionSet) {
-        this.decorations = buildTableDecorations(update.view)
-      }
-    }
+const tableField = StateField.define<DecorationSet>({
+  create: (state) => buildTableDecorations(state),
+  update(deco, tr) {
+    // 커서가 표 안/밖으로 이동할 때(selection)도 재계산. 표 위젯은 커서가 없는
+    // 위치에만 렌더되므로 IME 조합 영역과 겹치지 않음 → composing 가드 불필요.
+    if (tr.docChanged || tr.selection) return buildTableDecorations(tr.state)
+    return deco.map(tr.changes)
   },
-  { decorations: v => v.decorations },
-)
+  provide: (f) => EditorView.decorations.from(f),
+})
 
 // ─── Task List Enter ──────────────────────────────────────────────────────────
 
@@ -376,7 +367,7 @@ export default function Editor({ noteId, onSaved }: Props) {
             EditorView.lineWrapping,
             markdownDecorations,
             checkboxPlugin,
-            tablePlugin,
+            tableField,
             editorTheme,
             EditorView.updateListener.of(update => {
               if (!update.docChanged) return
