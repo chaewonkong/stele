@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState, type CSSProperties } from 'react'
-import { CreateNote, ListNotes, PurgeNote, RestoreNote, TogglePin, TrashNote } from '../wailsjs/go/main/App'
+import { CreateNote, ExportNote, ListNotes, PurgeNote, RestoreNote, TogglePin, TrashNote } from '../wailsjs/go/main/App'
 import { main } from '../wailsjs/go/models'
 import Editor from './components/Editor'
 import Sidebar from './components/Sidebar'
@@ -67,6 +67,14 @@ export default function App() {
     setActiveNoteId(null)
   }, [])
 
+  const handleExport = useCallback(async (id: number) => {
+    try {
+      await ExportNote(id)
+    } catch (e) {
+      console.error('ExportNote failed:', e)
+    }
+  }, [])
+
   return (
     <div className="flex flex-col h-screen overflow-hidden bg-white">
       {/* 신호등 전용 드래그 타이틀바 (OI-W1/W2): 사이드바와 동일한 회색으로 통일 */}
@@ -86,6 +94,7 @@ export default function App() {
           onRestore={handleRestore}
           onPurge={handlePurge}
           onToggleTrash={handleToggleTrash}
+          onExport={handleExport}
         />
         <Editor noteId={activeNoteId} onSaved={handleSaved} />
       </div>

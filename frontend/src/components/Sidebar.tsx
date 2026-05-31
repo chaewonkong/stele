@@ -24,11 +24,12 @@ interface Props {
   onRestore: (id: number) => void
   onPurge: (id: number) => void
   onToggleTrash: () => void
+  onExport: (id: number) => void
 }
 
 export default function Sidebar({
   notes, activeNoteId, showTrash,
-  onSelect, onCreate, onTogglePin, onTrash, onRestore, onPurge, onToggleTrash,
+  onSelect, onCreate, onTogglePin, onTrash, onRestore, onPurge, onToggleTrash, onExport,
 }: Props) {
   return (
     <aside className="w-64 shrink-0 bg-gray-50 border-r border-gray-200 flex flex-col h-full">
@@ -67,6 +68,7 @@ export default function Sidebar({
             onTrash={onTrash}
             onRestore={onRestore}
             onPurge={onPurge}
+            onExport={onExport}
           />
         ))}
       </div>
@@ -99,9 +101,10 @@ interface NoteItemProps {
   onTrash: (id: number) => void
   onRestore: (id: number) => void
   onPurge: (id: number) => void
+  onExport: (id: number) => void
 }
 
-function NoteItem({ note, isActive, showTrash, onSelect, onTogglePin, onTrash, onRestore, onPurge }: NoteItemProps) {
+function NoteItem({ note, isActive, showTrash, onSelect, onTogglePin, onTrash, onRestore, onPurge, onExport }: NoteItemProps) {
   return (
     <div
       className={`group relative px-4 py-3 cursor-pointer border-b border-gray-100 ${
@@ -119,14 +122,15 @@ function NoteItem({ note, isActive, showTrash, onSelect, onTogglePin, onTrash, o
             {note.preview || '내용 없음'}
           </p>
         </div>
-        <span className="text-xs text-gray-400 shrink-0 mt-0.5 select-none">
+        <span className="text-xs text-gray-400 shrink-0 mt-0.5 select-none group-hover:invisible">
           {formatDate(note.updatedAt)}
         </span>
       </div>
 
-      {/* 호버 액션 */}
+      {/* 호버 액션: 불투명 pill 툴바를 title 행에 맞춰 상단 정렬 */}
       <div
-        className="absolute right-2 top-1/2 -translate-y-1/2 hidden group-hover:flex items-center gap-0.5 rounded px-1 py-0.5"
+        className="absolute right-2 top-2.5 hidden group-hover:flex items-center gap-0.5
+          rounded-md bg-white shadow-md ring-1 ring-black/5 px-1 py-0.5"
         onClick={e => e.stopPropagation()}
       >
         {!showTrash ? (
@@ -137,6 +141,7 @@ function NoteItem({ note, isActive, showTrash, onSelect, onTogglePin, onTrash, o
             >
               📌
             </ActionBtn>
+            <ActionBtn title="이 노트 저장 (.md)" onClick={() => onExport(note.id)}>⤓</ActionBtn>
             <ActionBtn title="휴지통으로" onClick={() => onTrash(note.id)}>🗑</ActionBtn>
           </>
         ) : (
@@ -155,7 +160,7 @@ function ActionBtn({ title, onClick, children }: { title: string; onClick: () =>
     <button
       title={title}
       onClick={onClick}
-      className="w-6 h-6 flex items-center justify-center rounded hover:bg-gray-200 text-gray-600 text-xs"
+      className="w-5 h-5 flex items-center justify-center rounded hover:bg-gray-200 text-gray-600 text-xs leading-none"
     >
       {children}
     </button>
