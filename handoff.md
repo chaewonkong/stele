@@ -2,7 +2,7 @@
 
 ## 현재 상태
 
-M0~M4 완료. **M5 진행 중** (단일 export UI 완료, 성능·DMG 남음).
+M0~M5 완료 (콜드 스타트 수치 측정만 보류). v1 기능 마감 단계.
 
 - Go 백엔드: sqlc 기반 SQLite CRUD, Wails 바인딩 완성
 - 프론트엔드: 2-pane UI, CM6 에디터 (Bear형 decoration + 한글 IME 가드 + 자동저장)
@@ -47,16 +47,31 @@ M0~M4 완료. **M5 진행 중** (단일 export UI 완료, 성능·DMG 남음).
 
 ---
 
-## M5 남은 작업
+## M5 빌드·배포 (완료)
 
-1. **성능 점검 / 콜드 스타트 최적화** (SPEC §10)
-   - 목표 콜드 스타트 < 1.0s, 허용 < 1.5s (M2 MacBook Air 기준).
-   - ⚠️ `wails dev`는 Vite 개발 서버 때문에 느림 → **콜드 스타트는 `wails build` 후 `.app` 실행 기준**으로 측정.
-   - 번들: 현재 vite 빌드가 단일 chunk ~650kB(gzip ~221kB) — 경고만, 로컬 앱이라 치명적이진 않음. 필요 시 코드 스플릿.
-2. **DMG 패키징** (SPEC §11)
-   - `wails build -platform darwin/arm64` → `.app` → DMG.
-   - v1은 **미서명 로컬 배포**. Sequoia(15+) 절차: 첫 실행 차단 → 시스템 설정 > 개인정보 보호 및 보안 > "그래도 열기".
-   - 코드 서명/notarization은 v1 비목표(문서로만).
+### DMG 패키징 (완료)
+
+- 빌드: `wails build -platform darwin/arm64` → `build/bin/stele.app` (번들 12M, arm64,
+  Wails self-signed). `build/bin`은 `.gitignore` 대상이라 산출물은 커밋 안 됨.
+- DMG: `create-dmg` 미설치라 **`hdiutil`로 패키징** (드래그 설치형, `/Applications` 심볼릭 링크 포함):
+  ```bash
+  STAGE=$(mktemp -d)
+  cp -R build/bin/stele.app "$STAGE/"
+  ln -s /Applications "$STAGE/Applications"
+  hdiutil create -volname "stele" -srcfolder "$STAGE" -ov -format UDZO build/bin/stele.dmg
+  rm -rf "$STAGE"
+  ```
+  결과: `build/bin/stele.dmg` (~5.9M 압축, 체크섬 VALID).
+- v1은 **미서명 로컬 배포**. Sequoia(15+) 설치 절차: 첫 실행 차단 → 시스템 설정 > 개인정보 보호 및
+  보안 하단 > "그래도 열기". 코드 서명/notarization은 v1 비목표(문서로만).
+
+### 콜드 스타트 (측정 보류)
+
+- SPEC §10 목표 < 1.0s (허용 < 1.5s, M2 MacBook Air 기준). 번들 12M로 번들 목표는 충족.
+- ⚠️ `wails dev`는 Vite 개발 서버 때문에 느림 → **측정은 반드시 `wails build` 후 `.app` 실행 기준**.
+- 정확한 수치는 사용자 M2 환경에서 직접 측정 필요 → 현재 보류. 필요 시 진행.
+- 참고: vite 빌드가 단일 chunk ~650kB(gzip ~221kB) 경고. 로컬 앱이라 치명적이진 않으나, 추가
+  최적화 시 code-split 고려.
 
 ---
 

@@ -78,7 +78,7 @@ sqlc generate
 - [x] **M2** — 기본 UI: 2-pane 레이아웃, 사이드바(핀/휴지통), textarea 에디터, 자동저장
 - [x] **M3** — 에디터 코어: CM6 + lang-markdown, Bear형 mark 스타일링, **한글 IME 가드**
 - [x] **M4** — 블록 위젯: 체크박스 토글, 표 커서-인지 렌더, macOS 윈도우 크롬(신호등/드래그) + IME 깨짐 수정
-- [ ] **M5** — export·마감: **단일 노트 export UI 완료** (전체 export는 비제공 결정), 성능 점검·콜드 스타트 최적화·DMG 배포 남음
+- [x] **M5** — export·마감: 단일 노트 export UI, DMG 패키징(미서명) 완료. (전체 export 비제공, 콜드 스타트 수치 측정은 보류)
 
 ## 핵심 제약 (위반 시 버그)
 
